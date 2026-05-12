@@ -93,12 +93,7 @@ impl cosmic::Application for AppModel {
 
     fn view(&self) -> Element<'_, Self::Message> {
         use cosmic::applet::cosmic_panel_config::PanelAnchor;
-
-        let label = match (self.unread, self.config.is_configured()) {
-            (Some(n), _) => n.to_string(),
-            (None, false) => "—".to_owned(),
-            (None, true) => "…".to_owned(),
-        };
+        use cosmic::iced::{Color, Length};
 
         let is_horizontal = matches!(
             self.core.applet.anchor,
@@ -108,33 +103,70 @@ impl cosmic::Application for AppModel {
         let (icon_size, _) = self.core.applet.suggested_size(true);
         let (pad_major, pad_minor) = self.core.applet.suggested_padding(true);
         let icon_px = f32::from(icon_size);
-        // Big centered label, ~55 % of the icon height — keeps the outer red
-        // envelope visible while making the number readable.
-        let text_size = (icon_px * 0.55).round();
 
         let icon = cosmic::widget::icon(cosmic::widget::icon::from_svg_bytes(
             GMAIL_ICON_SVG.to_vec(),
         ))
         .size(icon_size);
 
-        let count_text = text(label)
-            .size(text_size)
-            .class(cosmic::iced::Color::WHITE)
-            .font(cosmic::font::bold())
-            .align_x(cosmic::iced::alignment::Horizontal::Right)
-            .align_y(cosmic::iced::alignment::Vertical::Bottom);
+        let badge_label = match (self.unread, self.config.is_configured()) {
+            (None, false) => None,
+            (Some(n), _) => Some(n.to_string()),
+            (None, true) => Some("…".to_owned()),
+        };
 
-        let count_overlay = cosmic::widget::container(count_text)
-            .width(cosmic::iced::Length::Fixed(icon_px))
-            .height(cosmic::iced::Length::Fixed(icon_px))
-            .align_x(cosmic::iced::alignment::Horizontal::Right)
-            .align_y(cosmic::iced::alignment::Vertical::Bottom);
+        let badge_height = (icon_px * 0.7).round();
+        let badge_text_size = (icon_px * 0.46).round();
+        let badge_pad_h = (icon_px * 0.22).round();
+        let badge_pad_v = (icon_px * 0.06).round();
+        let badge_radius = badge_height / 2.0;
+        let badge_color = Color::from_rgb(0.13, 0.50, 0.96);
 
-        let stacked = cosmic::iced::widget::Stack::new()
-            .width(cosmic::iced::Length::Fixed(icon_px))
-            .height(cosmic::iced::Length::Fixed(icon_px))
-            .push(icon)
-            .push(count_overlay);
+        let extra = badge_radius.round();
+        let stack_px = icon_px + extra;
+
+        let icon_area = cosmic::widget::container(icon)
+            .width(Length::Fixed(stack_px))
+            .height(Length::Fixed(stack_px))
+            .align_x(cosmic::iced::alignment::Horizontal::Left)
+            .align_y(cosmic::iced::alignment::Vertical::Top);
+
+        let stacked: Element<'_, Self::Message> = if let Some(label) = badge_label {
+            let badge_text = text(label)
+                .size(badge_text_size)
+                .class(Color::WHITE)
+                .font(cosmic::font::bold());
+
+            let badge_pill = cosmic::widget::container(badge_text)
+                .padding([badge_pad_v, badge_pad_h])
+                .height(Length::Fixed(badge_height))
+                .align_x(cosmic::iced::alignment::Horizontal::Center)
+                .align_y(cosmic::iced::alignment::Vertical::Center)
+                .style(move |_theme: &cosmic::Theme| cosmic::iced::widget::container::Style {
+                    background: Some(cosmic::iced::Background::Color(badge_color)),
+                    border: cosmic::iced::Border {
+                        radius: cosmic::iced::border::Radius::from(badge_radius),
+                        ..Default::default()
+                    },
+                    text_color: Some(Color::WHITE),
+                    ..Default::default()
+                });
+
+            let badge_area = cosmic::widget::container(badge_pill)
+                .width(Length::Fixed(stack_px))
+                .height(Length::Fixed(stack_px))
+                .align_x(cosmic::iced::alignment::Horizontal::Right)
+                .align_y(cosmic::iced::alignment::Vertical::Bottom);
+
+            cosmic::iced::widget::Stack::new()
+                .width(Length::Fixed(stack_px))
+                .height(Length::Fixed(stack_px))
+                .push(icon_area)
+                .push(badge_area)
+                .into()
+        } else {
+            icon_area.into()
+        };
 
         let (horizontal_padding, vertical_padding) = if is_horizontal {
             (pad_major, pad_minor)
